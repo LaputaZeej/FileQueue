@@ -236,7 +236,8 @@ final public class FileQueue<E> implements PointerChanged {
         try {
             checkRandomAccessFile();
 
-            if (mLength / 4 - mTailPoint < 0) {
+            // todo 这里自动扩容了，下面的while不会走
+            if (mLength >> 2 - mTailPoint < 0) {
                 capacity();
                 mRaf.setLength(mLength);
             }
