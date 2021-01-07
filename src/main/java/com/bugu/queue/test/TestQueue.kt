@@ -1,8 +1,10 @@
 package com.bugu.queue.test
 
 import com.bugu.queue.*
-import com.google.protobuf.CodedInputStream
-import com.google.protobuf.ExtensionRegistryLite
+import com.bugu.queue.transform.ProtoBuffTransformTestDog
+import com.bugu.queue.transform.GsonTransform
+import com.bugu.queue.transform.ProtoBuffTransform
+import com.bugu.queue.transform.Transform
 import com.laputa.dog._Dog
 import java.io.IOException
 import java.io.RandomAccessFile
@@ -104,25 +106,25 @@ fun testPutProto() {
 
 fun testPutProtoParse() {
     // capacity
-    val path = "C:\\Users\\xpl\\Documents\\projs\\mqtt\\put_proto_05_parse.txt"
+    val path = "C:\\Users\\xpl\\Documents\\projs\\mqtt\\put_proto_06_parse.txt"
     val fileQueue = protoFileQueueParse(path)
     println("head = ${fileQueue.headPoint}")
     println("tail = ${fileQueue.tailPoint}")
     // put
-    startThread {
-        createData().map {
-            _Dog.Dog.newBuilder().setAge(it.age).setName(it.name).build()
-        }.forEach {
-            fileQueue.put(it)
-        }
-    }
+//    startThread {
+//        createData().map {
+//            _Dog.Dog.newBuilder().setAge(it.age).setName(it.name).build()
+//        }.forEach {
+//            fileQueue.put(it)
+//        }
+//    }
 
     // take
     startThread {
         while (true) {
             Thread.sleep(1000)
             val take = fileQueue.take()
-            println("[1]取头：$take")
+            println("[1]取头：( $take )")
         }
     }
 }
@@ -134,7 +136,7 @@ private fun createData(): List<Dog> {
 }
 
 private fun protoFileQueueParse(path: String): FileQueue<_Dog.Dog> {
-//    val fileQueue = FileQueue<_Dog.Dog>(path, ProtoBuffTransform<_Dog.Dog>(_Dog.Dog.PARSER))
+//    val fileQueue = FileQueue<_Dog.Dog>(path, ProtoBuffTransform<_Dog.Dog>(_Dog.Dog.PARSER)) // PARSER私有的
     val fileQueue = FileQueue<_Dog.Dog>(
         path, ProtoBuffTransform<_Dog.Dog>(_Dog.Dog::class.java)
     )
@@ -142,7 +144,7 @@ private fun protoFileQueueParse(path: String): FileQueue<_Dog.Dog> {
 }
 
 private fun protoFileQueue(path: String): FileQueue<_Dog.Dog> {
-    val fileQueue = FileQueue<_Dog.Dog>(path, DogProtoBuffTransform())
+    val fileQueue = FileQueue<_Dog.Dog>(path, ProtoBuffTransformTestDog())
     return fileQueue
 }
 

@@ -3,14 +3,14 @@ package com.bugu.queue;
 import java.io.RandomAccessFile;
 
 /**
- * æŠŠheadPointä¹‹å‰çš„æ•°æ®æ¸…é™¤ï¼ŒèŠ‚çœå†…å­˜
- * åšæ³•ï¼š
- * 1.å…ˆè®¡ç®—æ–°çš„headPointå’ŒtailPoint
- * 2.ä»0å†™å…¥æ–°çš„å¤´
- * 3.ä»æ—§çš„headPointå¤„è¯»å‡ºæ•°æ®
- * 4.æŠŠè¯»å‡ºçš„æ•°æ®ä»æ–°çš„headPointå†™å…¥ï¼Œå¹¶æ›´æ–°æ–°çš„tailPoint
- * 5.é‡å¤3&4ï¼Œç›´åˆ°æ²¡æœ‰æ–°çš„æ•°æ®
- * 6.æ›´æ–°æ–‡ä»¶é•¿åº¦ï¼Œæ›´æ–°headå’Œtailæ•°æ®ã€‚
+ * °ÑheadPointÖ®Ç°µÄÊı¾İÇå³ı£¬½ÚÊ¡ÄÚ´æ
+ * ×ö·¨£º
+ * 1.ÏÈ¼ÆËãĞÂµÄheadPointºÍtailPoint
+ * 2.´Ó0Ğ´ÈëĞÂµÄÍ·
+ * 3.´Ó¾ÉµÄheadPoint´¦¶Á³öÊı¾İ
+ * 4.°Ñ¶Á³öµÄÊı¾İ´ÓĞÂµÄheadPointĞ´Èë£¬²¢¸üĞÂĞÂµÄtailPoint
+ * 5.ÖØ¸´3&4£¬Ö±µ½Ã»ÓĞĞÂµÄÊı¾İ
+ * 6.¸üĞÂÎÄ¼ş³¤¶È£¬¸üĞÂheadºÍtailÊı¾İ¡£
  */
 public class DefaultClearPolicy implements ClearPolicy {
 
@@ -28,13 +28,13 @@ public class DefaultClearPolicy implements ClearPolicy {
             RandomAccessFile writeRaf = queue.getWriteRaf();
             try {
                 System.out.println("old length = " + writeRaf.length());
-                // å†™å…¥å¤´
+                // Ğ´ÈëÍ·
                 writeRaf.seek(0);
                 writeRaf.writeLong(newHeadPoint);
                 writeRaf.writeLong(newTailPoint);
                 long newLength = writeRaf.getFilePointer(); // 16
                 long pointTemp = headPoint;
-                // å†™å…¥æ•°æ® ï¼Œä»æ—§çš„headPointå–å‡ºæ•°æ®tempï¼Œåœ¨æ–°çš„headPointå†™å…¥æ•°æ®
+                // Ğ´ÈëÊı¾İ £¬´Ó¾ÉµÄheadPointÈ¡³öÊı¾İtemp£¬ÔÚĞÂµÄheadPointĞ´ÈëÊı¾İ
                 writeRaf.seek(pointTemp);
                 byte[] temp = new byte[1024];
                 int count;
@@ -50,7 +50,7 @@ public class DefaultClearPolicy implements ClearPolicy {
                 writeRaf.setLength(newLength);
                 System.out.println("newLength = " + newLength);
                 System.out.println("clear end.");
-                // æ›´æ–°æ•°æ®
+                // ¸üĞÂÊı¾İ
                 queue.setHeadPoint(newHeadPoint);
                 queue.setTailPoint(newTailPoint);
                 queue.setLength(newLength);
@@ -59,7 +59,7 @@ public class DefaultClearPolicy implements ClearPolicy {
                 e.printStackTrace();
             }
         }
-        // æ•°æ®ä¸èƒ½åˆ é™¤ï¼Œåªèƒ½æœŸæœ›å…¶ä»–åœ°æ–¹æ¸…ç†å†…å­˜
+        // Êı¾İ²»ÄÜÉ¾³ı£¬Ö»ÄÜÆÚÍûÆäËûµØ·½ÇåÀíÄÚ´æ
         return false;
     }
 }

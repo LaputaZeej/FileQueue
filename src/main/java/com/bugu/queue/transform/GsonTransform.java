@@ -1,4 +1,4 @@
-package com.bugu.queue;
+package com.bugu.queue.transform;
 
 import com.google.gson.Gson;
 
@@ -6,7 +6,7 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 
 /**
- * json åè®®å­˜æ•°æ®
+ * json Ğ­Òé´æÊı¾İ
  * @param <E>
  */
 public  class GsonTransform<E> implements Transform<E> {

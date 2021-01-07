@@ -1,4 +1,4 @@
-﻿//package com.bugu.queue.test;
+//package com.bugu.queue.test;
 //
 //import java.lang.reflect.Constructor;
 //

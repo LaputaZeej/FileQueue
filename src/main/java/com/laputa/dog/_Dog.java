@@ -598,7 +598,7 @@ public final class _Dog {
       return DEFAULT_INSTANCE;
     }
 
-    private static final com.google.protobuf.Parser<Dog>
+    public static final com.google.protobuf.Parser<Dog>
         PARSER = new com.google.protobuf.AbstractParser<Dog>() {
       @Override
       public Dog parsePartialFrom(

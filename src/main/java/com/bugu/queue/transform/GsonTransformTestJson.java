@@ -1,4 +1,4 @@
-package com.bugu.queue;
+package com.bugu.queue.transform;
 
 import com.google.gson.Gson;
 
@@ -6,13 +6,14 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 
 /**
+ * 测试类 用byte存
  */
-public  class GsonTransform2<E> implements Transform<E> {
+public  class GsonTransformTestJson<E> implements Transform<E> {
     private Gson gson;
     private Class<E> clz;
     private static final String SEPARATOR = ";";
 
-    public GsonTransform2(Class<E> clz) {
+    public GsonTransformTestJson(Class<E> clz) {
         gson = new Gson();
         this.clz = clz;
     }

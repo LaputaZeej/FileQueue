@@ -1,10 +1,10 @@
-package com.bugu.queue;
+package com.bugu.queue.transform;
 
 import java.io.RandomAccessFile;
 
 /**
- * è½¬æ¢å™¨
- * å¦‚ä½•å°†æ•°æ®è½¬æˆå­—èŠ‚ç ï¼Œä»¥åŠå¦‚ä½•è§£æå­—èŠ‚ç ä¸ºæ•°æ®
+ * ×ª»»Æ÷
+ * ÈçºÎ½«Êı¾İ×ª³É×Ö½ÚÂë£¬ÒÔ¼°ÈçºÎ½âÎö×Ö½ÚÂëÎªÊı¾İ
  */
 public interface Transform<E> {
     void write(E e, RandomAccessFile raf);

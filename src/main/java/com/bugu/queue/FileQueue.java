@@ -1,5 +1,6 @@
 package com.bugu.queue;
 
+import com.bugu.queue.transform.Transform;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 

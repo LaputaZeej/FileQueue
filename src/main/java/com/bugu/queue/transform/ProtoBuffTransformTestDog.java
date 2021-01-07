@@ -1,14 +1,13 @@
-package com.bugu.queue;
+package com.bugu.queue.transform;
 
-import com.google.protobuf.ByteString;
 import com.laputa.dog._Dog;
 
 import java.io.IOException;
 import java.io.RandomAccessFile;
 
-public class DogProtoBuffTransform implements Transform<_Dog.Dog> {
+// 测试类 单个的测试
+public class ProtoBuffTransformTestDog implements Transform<_Dog.Dog> {
     private static final String SEPARATOR = ";";
-
 
     @Override
     public void write(_Dog.Dog e, RandomAccessFile raf) {
