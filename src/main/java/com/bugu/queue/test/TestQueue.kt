@@ -1,17 +1,158 @@
 package com.bugu.queue.test
 
-import com.bugu.queue.FileQueue
-import com.bugu.queue.Transform
+import com.bugu.queue.*
+import com.google.protobuf.CodedInputStream
+import com.google.protobuf.ExtensionRegistryLite
+import com.laputa.dog._Dog
 import java.io.IOException
 import java.io.RandomAccessFile
 
 fun main() {
-    testQ()
+//    testPutNormal()
+//    testPutGson()
+//    testPutProto()
+//    testPeekProto()
+//    testTakeProto()
+    testPutProtoParse()
+
 }
 
-fun testQ() {
-    val path = "C:\\Users\\xpl\\Documents\\projs\\mqtt\\hhhhhh.txt"
-    val fileQueue = FileQueue<Dog>(path, object : Transform<Dog> {
+fun testPeekProto() {
+
+    val path = "C:\\Users\\xpl\\Documents\\projs\\mqtt\\put_proto_02.txt"
+    val fileQueue = protoFileQueue(path)
+    println("head = ${fileQueue.headPoint}")
+    println("tail = ${fileQueue.tailPoint}")
+    val peek = fileQueue.peek()
+    println("peek ${peek?.name} - ${peek?.age}")
+}
+
+fun testTake() {
+    val path = "C:\\Users\\xpl\\Documents\\projs\\mqtt\\put_gson_01.txt"
+    val fileQueue = gsonFileQueue(path)
+    println("head = ${fileQueue.headPoint}")
+    println("tail = ${fileQueue.tailPoint}")
+    // take
+    startThread {
+        while (true) {
+            Thread.sleep(1000)
+            val take = fileQueue.take()
+            println("[1]取头：$take")
+        }
+    }
+}
+
+fun testTakeProto() {
+    val path = "C:\\Users\\xpl\\Documents\\projs\\mqtt\\put_proto_03.txt"
+    val fileQueue = protoFileQueue(path)
+    println("head = ${fileQueue.headPoint}")
+    println("tail = ${fileQueue.tailPoint}")
+    // take
+    startThread {
+        while (true) {
+            Thread.sleep(1000)
+            val take = fileQueue.take()
+            println("[1]取头：$take")
+        }
+    }
+}
+
+fun testPutGson() {
+    // capacity 80 81kb
+    val path = "C:\\Users\\xpl\\Documents\\projs\\mqtt\\put_gson_01.txt"
+    val fileQueue = gsonFileQueue(path)
+    println("head = ${fileQueue.headPoint}")
+    println("tail = ${fileQueue.tailPoint}")
+    // put
+    startThread {
+        createData().forEach {
+            fileQueue.put(it)
+        }
+    }
+}
+
+fun testPutNormal() {
+    // capacity 34 35kb
+    val path = "C:\\Users\\xpl\\Documents\\projs\\mqtt\\put_normal_01.txt"
+    val fileQueue = normalFileQueue(path)
+    println("head = ${fileQueue.headPoint}")
+    println("tail = ${fileQueue.tailPoint}")
+    // put
+    startThread {
+        createData().forEach {
+            fileQueue.put(it)
+        }
+    }
+}
+
+
+fun testPutProto() {
+    // capacity 39 39kb
+    val path = "C:\\Users\\xpl\\Documents\\projs\\mqtt\\put_proto_03.txt"
+    val fileQueue = protoFileQueue(path)
+    println("head = ${fileQueue.headPoint}")
+    println("tail = ${fileQueue.tailPoint}")
+    // put
+    startThread {
+        createData().map {
+            _Dog.Dog.newBuilder().setAge(it.age).setName(it.name).build()
+        }.forEach {
+            fileQueue.put(it)
+        }
+    }
+}
+
+fun testPutProtoParse() {
+    // capacity
+    val path = "C:\\Users\\xpl\\Documents\\projs\\mqtt\\put_proto_05_parse.txt"
+    val fileQueue = protoFileQueueParse(path)
+    println("head = ${fileQueue.headPoint}")
+    println("tail = ${fileQueue.tailPoint}")
+    // put
+    startThread {
+        createData().map {
+            _Dog.Dog.newBuilder().setAge(it.age).setName(it.name).build()
+        }.forEach {
+            fileQueue.put(it)
+        }
+    }
+
+    // take
+    startThread {
+        while (true) {
+            Thread.sleep(1000)
+            val take = fileQueue.take()
+            println("[1]取头：$take")
+        }
+    }
+}
+
+private fun createData(): List<Dog> {
+    return (1..2000).map {
+        Dog("[2]dog$it", it)
+    }
+}
+
+private fun protoFileQueueParse(path: String): FileQueue<_Dog.Dog> {
+//    val fileQueue = FileQueue<_Dog.Dog>(path, ProtoBuffTransform<_Dog.Dog>(_Dog.Dog.PARSER))
+    val fileQueue = FileQueue<_Dog.Dog>(
+        path, ProtoBuffTransform<_Dog.Dog>(_Dog.Dog::class.java)
+    )
+    return fileQueue
+}
+
+private fun protoFileQueue(path: String): FileQueue<_Dog.Dog> {
+    val fileQueue = FileQueue<_Dog.Dog>(path, DogProtoBuffTransform())
+    return fileQueue
+}
+
+private fun gsonFileQueue(path: String): FileQueue<Dog> {
+    val fileQueue = FileQueue<Dog>(path, GsonTransform<Dog>(Dog::class.java))
+    return fileQueue
+}
+
+private fun normalFileQueue(path: String): FileQueue<Dog> {
+    return FileQueue<Dog>(path, object : Transform<Dog> {
         override fun write(dog: Dog, raf: RandomAccessFile) {
             try {
                 raf.writeUTF(dog.name)
@@ -33,49 +174,6 @@ fun testQ() {
             return dog
         }
     })
-
-    println("head = ${fileQueue.headPoint}")
-    println("tail = ${fileQueue.tailPoint}")
-
-    /*  println("准备开始清理多余数据")
-      fileQueue.clearDisk()*/
-
-    // put
-    startThread {
-        (1..10).map {
-            Dog("[1]dog$it", it)
-        }.forEach {
-            Thread.sleep(10)
-            fileQueue.put(it)
-        }
-    }
-
-    // take
-    startThread {
-        Thread.sleep(1000)
-        val take = fileQueue.take()
-        println("[1]取头：$take")
-    }
-
-    // put
-    startThread {
-        Thread.sleep(20 * 1000)
-        (1..10000).map {
-            Dog("[2]dog$it", it)
-        }.forEach {
-            Thread.sleep(10)
-            fileQueue.put(it)
-        }
-    }
-
-    // take
-    startThread {
-        while (true) {
-            Thread.sleep(1000)
-            val take = fileQueue.take()
-            println("[1]取头：$take")
-        }
-    }
 }
 
 private fun startThread(block: () -> Unit) {

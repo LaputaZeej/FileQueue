@@ -1,0 +1,9 @@
+syntax = "proto3";
+package com.test.protocol.common;
+
+option java_package = "com.test.protocol.common";
+
+message Point {
+    double x = 1;
+    double y = 2;
+}

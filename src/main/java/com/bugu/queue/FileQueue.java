@@ -9,30 +9,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
-/**
- * 【文件队列】todo
- * <p>
- * 以文件为数据载体，实现了读take写put各自阻塞队列。
- * 文件以一定的格式存储，前16字节存储了头mHeadPoint和尾mTailPoint的指针位置
- * 初始值头和尾都为0，文件大小默认值
- * 添加数据时，更新尾指针位置，并写入文件头。
- * 获取数据时，更新头指针位置，并写入文件头。
- * <p>
- * 当尾指针快超过文件大小时，扩容
- * 当物理内存达到一定阈值时，尝试清理头指针之前的数据，并更新文件长度。
- * <p>
- * <p>
- * 【文件格式】
- * --文件头16字节
- * ----head 0xFFFFFFFF
- * ----tail 0xFFFFFFFF
- * --数据
- * ----读自定义
- * ----取自定义
- */
 final public class FileQueue<E> implements PointerChanged {
 
-    private static final long DEFAULT_LENGTH = 2 * 1024 * 1024;
+//    private static final long DEFAULT_LENGTH = 2 << 19; // 1M
+    private static final long DEFAULT_LENGTH = 2 << 9; // 1M
     private static final long POINT_HEAD = 0;
     private static final long POINT_TAIL = 2 << 2;
     static final long HEADER_LENGTH = 2 << 3;
@@ -224,8 +204,12 @@ final public class FileQueue<E> implements PointerChanged {
         mLength += DEFAULT_LENGTH;
     }
 
+    private long vpt() {
+        return mLength >> 3;
+    }
+
     /**
-     * todo 功能：数据写入一定的length是否需要分文件存贮？利于：磁盘满了直接删除老的文件。
+     * todo
      */
     public void put(@NotNull E e) throws InterruptedException {
         if (mClear.get()) {
@@ -236,8 +220,8 @@ final public class FileQueue<E> implements PointerChanged {
         try {
             checkRandomAccessFile();
 
-            // todo 这里自动扩容了，下面的while不会走
-            if (mLength >> 2 - mTailPoint < 0) {
+            // todo
+            if (mLength - vpt() < mTailPoint) {
                 capacity();
                 mRaf.setLength(mLength);
             }
@@ -247,7 +231,7 @@ final public class FileQueue<E> implements PointerChanged {
                     capacity();
                     mRaf.setLength(mLength);
                 } else {
-                    // todo 处理内存不足的情况
+                    // todo
                     new Thread(this::tryClearDisk).start();
                     System.out.println("< Not enough disk space ! wait... ... >");
                     notFull.await();
@@ -265,7 +249,7 @@ final public class FileQueue<E> implements PointerChanged {
             ex.printStackTrace();
         } finally {
 //            if (mRaf != null) {
-//                mRaf.close(); // close 时关闭
+//                mRaf.close(); // close
 //            }
             putLock.unlock();
         }

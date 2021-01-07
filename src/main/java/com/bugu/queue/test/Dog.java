@@ -13,6 +13,12 @@ public class Dog {
         this.age = age;
     }
 
+
+    private Dog(String name, int age,int test) {
+        this.name = name;
+        this.age = age;
+    }
+
     public String getName() {
         return name;
     }
