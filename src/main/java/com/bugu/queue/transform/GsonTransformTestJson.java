@@ -6,7 +6,7 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 
 /**
- * æµ‹è¯•ç±» ç”¨byteå­˜
+ * ²âÊÔÀà ÓÃbyte´æ
  */
 public  class GsonTransformTestJson<E> implements Transform<E> {
     private Gson gson;

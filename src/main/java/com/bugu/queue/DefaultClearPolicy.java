@@ -16,50 +16,98 @@ public class DefaultClearPolicy implements ClearPolicy {
 
     @Override
     public <E> boolean clear(FileQueue<E> queue) {
+        display(queue, "a");
         long headPoint = queue.getHeadPoint();
         long tailPoint = queue.getTailPoint();
-        long r = tailPoint - headPoint;
-        System.out.println("r = " + r);
-        if (headPoint > FileQueue.HEADER_LENGTH && r > 0) {
+        long offset = tailPoint - headPoint;
+        System.out.println("headPoint = " + headPoint + ",tailPoint = " + tailPoint + ",offset= " + offset);
+        if (headPoint > FileQueue.HEADER_LENGTH && offset > 0) {
             long newHeadPoint = FileQueue.HEADER_LENGTH;
-            long newTailPoint = FileQueue.HEADER_LENGTH + r;
-            System.out.println("newHeadPoint = " + newHeadPoint);
-            System.out.println("newTailPoint = " + newTailPoint);
+            long newTailPoint = FileQueue.HEADER_LENGTH + offset;
+            System.out.println("newHeadPoint = " + newHeadPoint + ",newTailPoint = " + newTailPoint);
             RandomAccessFile writeRaf = queue.getWriteRaf();
             try {
-                System.out.println("old length = " + writeRaf.length());
-                // 写入头
-                writeRaf.seek(0);
-                writeRaf.writeLong(newHeadPoint);
-                writeRaf.writeLong(newTailPoint);
-                long newLength = writeRaf.getFilePointer(); // 16
-                long pointTemp = headPoint;
-                // 写入数据 ，从旧的headPoint取出数据temp，在新的headPoint写入数据
-                writeRaf.seek(pointTemp);
                 byte[] temp = new byte[1024];
                 int count;
-                while (-1 != (count = writeRaf.read(temp))) {
+                long newHeadPointer = 0;
+                long oldHeadPointer = headPoint;
+                boolean writeHeaded = false;
+                while (true) {
+                    if (!writeHeaded) {
+                        // 写入头
+                        writeRaf.seek(0);
+                        writeRaf.writeLong(newHeadPoint);
+                        writeRaf.writeLong(newTailPoint);
+                        newHeadPointer = writeRaf.getFilePointer();
+                        // 写入数据 ，从旧的headPoint取出数据temp，在新的headPoint写入数据
+                        writeRaf.seek(oldHeadPointer);
+                        writeHeaded = true;
+                    }
+
+                    count = writeRaf.read(temp);
                     System.out.println("count:" + count);
-                    writeRaf.seek(newLength);
+                    if (count == -1) {
+                        break;
+                    }
+
+                    //System.out.println("temp :" + new String(temp));
+
+                    writeRaf.seek(newHeadPointer);
                     writeRaf.write(temp, 0, count);
-                    pointTemp += count;
-                    newLength += count;
-                    writeRaf.seek(pointTemp);
+                    oldHeadPointer += count;
+                    newHeadPointer += count;
+                    writeRaf.seek(oldHeadPointer);
                 }
                 //newLength += FileQueue.DEFAULT_LENGTH;
-                writeRaf.setLength(newLength);
-                System.out.println("newLength = " + newLength);
-                System.out.println("clear end.");
+                writeRaf.setLength(newTailPoint);
                 // 更新数据
                 queue.setHeadPoint(newHeadPoint);
                 queue.setTailPoint(newTailPoint);
-                queue.setLength(newLength);
+                queue.setLength(newTailPoint);
+                System.out.println("clear end.");
+                //Thread.sleep(10 * 1000);
+                display(queue, "b");
                 return true;
             } catch (Exception e) {
                 e.printStackTrace();
+            }finally {
+//                queue.signalNotFull();
+//                queue.signalNotEmpty();
             }
+
         }
         // 数据不能删除，只能期望其他地方清理内存
+//        queue.signalNotFull();
+//        queue.signalNotEmpty();
         return false;
+    }
+
+    private static boolean debug = false;
+
+    public static <E> void display(FileQueue<E> queue, String tag) {
+
+        if (!debug) {
+            return;
+        }
+        boolean isOver = false;
+        try {
+            RandomAccessFile rw = queue.createReadRandomAccessFile();
+            long head = rw.readLong();
+            long tail = rw.readLong();
+            String temp;
+            System.out.println("******** display start head = " + head + ",tail = " + tail + " ********");
+            while (!isOver) {
+                try {
+                    temp = rw.readUTF();
+                    System.out.println("【" + tag + "】" + temp);
+                } catch (Exception e) {
+                    isOver = true;
+                }
+            }
+            System.out.println("******** display over ********");
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
     }
 }

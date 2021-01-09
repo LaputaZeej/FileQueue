@@ -5,7 +5,7 @@ import com.laputa.dog._Dog;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 
-// æµ‹è¯•ç±» å•ä¸ªçš„æµ‹è¯•
+// ²âÊÔÀà µ¥¸öµÄ²âÊÔ
 public class ProtoBuffTransformTestDog implements Transform<_Dog.Dog> {
     private static final String SEPARATOR = ";";
 

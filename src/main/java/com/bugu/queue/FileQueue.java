@@ -1,19 +1,21 @@
 package com.bugu.queue;
 
+import com.bugu.queue.exception.FileQueueException;
+import com.bugu.queue.exception.NotEnoughDiskException;
 import com.bugu.queue.transform.Transform;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.*;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
 final public class FileQueue<E> implements PointerChanged {
 
-//    private static final long DEFAULT_LENGTH = 2 << 19; // 1M
-    private static final long DEFAULT_LENGTH = 2 << 9; // 1M
+    //    private static final long DEFAULT_LENGTH = 2 << 19; // 1M
+    private static final long DEFAULT_LENGTH = 2 << 9; // 1KB
     private static final long POINT_HEAD = 0;
     private static final long POINT_TAIL = 2 << 2;
     static final long HEADER_LENGTH = 2 << 3;
@@ -99,7 +101,6 @@ final public class FileQueue<E> implements PointerChanged {
                 RandomAccessFile r = new RandomAccessFile(file, "rw");
                 initHeader(r);
             }
-
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -113,6 +114,7 @@ final public class FileQueue<E> implements PointerChanged {
             logger("init header complete.");
             this.mTailPoint = HEADER_LENGTH;
             this.mHeadPoint = HEADER_LENGTH;
+            this.mLength = DEFAULT_LENGTH;
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -126,6 +128,7 @@ final public class FileQueue<E> implements PointerChanged {
             long tail = raf.readLong();
             this.mHeadPoint = header;
             this.mTailPoint = tail;
+            this.mLength = raf.length();
             logger("parse header. mHeadPoint = " + mHeadPoint + ", mTailPoint = " + mTailPoint + "");
             if (mHeadPoint < 0 || mTailPoint < 0 || mHeadPoint > mTailPoint) {
                 logger("error file");
@@ -141,7 +144,7 @@ final public class FileQueue<E> implements PointerChanged {
     private void updateHead(long head) throws Exception {
         synchronized (mUpdateHead) {
             if (head > mHeadPoint) {
-                RandomAccessFile r = createWriteRandomAccessFile(mPath, "rw");
+                RandomAccessFile r = createWriteRandomAccessFile();
                 r.seek(POINT_HEAD);
                 r.writeLong(head);
                 mHeadPoint = head;
@@ -152,7 +155,7 @@ final public class FileQueue<E> implements PointerChanged {
     private void updateTail(long tail) throws Exception {
         synchronized (mUpdateTail) {
             if (tail > mTailPoint) {
-                RandomAccessFile r = createWriteRandomAccessFile(mPath, "rw");
+                RandomAccessFile r = createWriteRandomAccessFile();
                 r.seek(POINT_TAIL);
                 r.writeLong(tail);
                 mTailPoint = tail;
@@ -161,38 +164,30 @@ final public class FileQueue<E> implements PointerChanged {
     }
 
     private long parseHead() throws Exception {
-        RandomAccessFile r = createWriteRandomAccessFile(mPath, "r");
+        RandomAccessFile r = createReadRandomAccessFile();
         r.seek(POINT_HEAD);
         return r.readLong();
     }
 
     private long parseTail() throws Exception {
-        RandomAccessFile r = createWriteRandomAccessFile(mPath, "r");
+        RandomAccessFile r = createReadRandomAccessFile();
         r.seek(POINT_TAIL);
         return r.readLong();
     }
 
-    private void createWriteRandomAccessFile(String path, long length) throws IOException {
+    private void checkRandomAccessFile() throws IOException {
         if (this.mRaf == null) {
-            this.mRaf = createWriteRandomAccessFile(path);
-            mRaf.setLength(length);
+            this.mRaf = createWriteRandomAccessFile();
+            this.mRaf.setLength(mLength);
         }
     }
 
-    private void checkRandomAccessFile() throws IOException {
-        createWriteRandomAccessFile(mPath, mLength);
+    public RandomAccessFile createReadRandomAccessFile() throws FileNotFoundException {
+        return RafUtil.createR(mPath);
     }
 
-    private static @NotNull
-    RandomAccessFile createWriteRandomAccessFile(String path, String mode)
-            throws FileNotFoundException {
-        return new RandomAccessFile(path, mode);
-    }
-
-    private static @NotNull
-    RandomAccessFile createWriteRandomAccessFile(String path)
-            throws FileNotFoundException {
-        return createWriteRandomAccessFile(path, "rw");
+    private RandomAccessFile createWriteRandomAccessFile() throws FileNotFoundException {
+        return RafUtil.createRW(mPath);
     }
 
     // TODO ADD
@@ -205,6 +200,7 @@ final public class FileQueue<E> implements PointerChanged {
         mLength += DEFAULT_LENGTH;
     }
 
+    // 剩余长度阈值
     private long vpt() {
         return mLength >> 3;
     }
@@ -214,35 +210,33 @@ final public class FileQueue<E> implements PointerChanged {
      */
     public void put(@NotNull E e) throws InterruptedException {
         if (mClear.get()) {
+            System.out.println("正在清理....");
             return;
         }
         final ReentrantLock putLock = this.putLock;
         putLock.lockInterruptibly();
         try {
             checkRandomAccessFile();
+            // todo 自动扩容
+           /* if (mLength - vpt() < mTailPoint) {
+                capacity();
+                mRaf.setLength(mLength);
+            }*/
 
-            // todo
-            if (mLength - vpt() < mTailPoint) {
+            // 当tail到了文件末尾时，考虑扩容
+            while (mTailPoint >= mLength || mLength - vpt() < mTailPoint) {
+                // 扩容前，检查剩余磁盘大小
+                while (!checkDiskSize()) {
+                    System.out.println("< Not enough disk space ! wait... ... >");
+                    // 磁盘不够 先释放文件中多余的数据（head之前的数据）
+                    tryClearDisk();
+                    notFull.await();
+                }
                 capacity();
                 mRaf.setLength(mLength);
             }
 
-            while (mTailPoint >= mLength) {
-                if (checkDiskSize()) {
-                    capacity();
-                    mRaf.setLength(mLength);
-                } else {
-                    // todo
-                    new Thread(this::tryClearDisk).start();
-                    System.out.println("< Not enough disk space ! wait... ... >");
-                    notFull.await();
-                }
-            }
-
-            mRaf.seek(mTailPoint);
-            transform.write(e, mRaf);
-            long tail = mRaf.getFilePointer();
-            updateTail(tail);
+            long tail = enqueue(e);
             onTailChanged(tail);
             signalNotEmpty();
             logger("put  mTailPoint = " + tail);
@@ -256,17 +250,69 @@ final public class FileQueue<E> implements PointerChanged {
         }
     }
 
-    private void tryClearDisk() {
-        // stop all put and take first?
-        mClear.set(true);
-        boolean result = clearDisk();
-        mClear.set(false);
-        //if (result) {
-        signalNotFull();
-        //}
+    private E dequeue(RandomAccessFile readRaf) throws Exception {
+        readRaf.seek(this.mHeadPoint);
+        return transform.read(readRaf);
     }
 
-    protected boolean clearDisk() {
+    private long enqueue(@NotNull E e) throws Exception {
+        mRaf.seek(mTailPoint);
+        transform.write(e, mRaf);
+        long tail = mRaf.getFilePointer();
+        updateTail(tail);
+        return tail;
+    }
+
+    private ExecutorService executorService = Executors.newSingleThreadExecutor();
+
+    private void beforeClearForTest() {
+        for (int i = 0; i < 100; i++) {
+            try {
+                take();
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
+        }
+        try {
+            Thread.sleep(1000);
+        } catch (InterruptedException ex) {
+            ex.printStackTrace();
+        }
+    }
+
+    private long clearDiskTimeOutTime = 1000;
+
+    private void tryClearDisk() throws NotEnoughDiskException {
+        // stop all put and take first?
+        executorService.submit(() -> {
+            // beforeClearForTest();
+            mClear.set(true);
+            boolean result = clearDisk();
+            mClear.set(false);
+            System.out.println("clear result = " + result);
+            if (result) {
+                signalNotFull();
+                signalNotEmpty();
+            } else {
+                // throw new NotEnoughDiskException();
+                // todo 停止？
+                try {
+                    clearDiskTimeOutTime = clearDiskTimeOutTime * 2;
+                    if (clearDiskTimeOutTime > 100 * 1000) {
+                        clearDiskTimeOutTime = 1000;
+                    }
+                    Thread.sleep(clearDiskTimeOutTime);
+                    signalNotFull();
+                    signalNotEmpty();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        });
+
+    }
+
+    public boolean clearDisk() {
         return mPolicy.clear(this);
     }
 
@@ -274,8 +320,14 @@ final public class FileQueue<E> implements PointerChanged {
      * TODO  checkDiskSize
      */
     protected boolean checkDiskSize() {
-
+        try {
+            long length = mRaf.length();
+            return length <= DEFAULT_LENGTH * 512;
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
         return true;
+
     }
 
     public E remove() {
@@ -287,30 +339,31 @@ final public class FileQueue<E> implements PointerChanged {
         final ReentrantLock takeLock = this.takeLock;
         takeLock.lockInterruptibly();
         long head = this.mHeadPoint;
+        RandomAccessFile readRaf = null;
         try {
-
-            while (head >= mTailPoint || mClear.get()) {
+            while (head >= mTailPoint /*|| mClear.get()*/) {
                 System.out.println("< take nothing any more or in-clearing-disk,wait... ... >");
                 notEmpty.await();
             }
-            RandomAccessFile readRaf = createWriteRandomAccessFile(mPath);
-            readRaf.seek(this.mHeadPoint);
-            E read = transform.read(readRaf);
+            readRaf = createReadRandomAccessFile();
+            E e = dequeue(readRaf);
             long filePointer = readRaf.getFilePointer();
-            if (read != null /*&& mTailPoint != 0 && filePointer <= mTailPoint*/) {
+            if (e != null /*&& mTailPoint != 0 && filePointer <= mTailPoint*/) {
                 updateHead(filePointer);
 //                this.mHeadPoint = readRaf.getFilePointer();
                 onHeadChanged(this.mHeadPoint);
             }
             logger("take mHeadPoint = " + this.mHeadPoint);
-            readRaf.close();
-            return read;
+            return e;
         } catch (Exception e) {
             e.printStackTrace();
         } finally {
+            if (readRaf != null) {
+                readRaf.close();
+            }
             takeLock.unlock();
         }
-        return null;
+        throw new FileQueueException("take null");
     }
 
     @Nullable
@@ -325,18 +378,12 @@ final public class FileQueue<E> implements PointerChanged {
         }
         E e = null;
         try {
-            RandomAccessFile rw = createWriteRandomAccessFile(mPath, "rw");
-            rw.seek(mHeadPoint);
-            e = transform.read(rw);
+            RandomAccessFile rw = createReadRandomAccessFile();
+            e = dequeue(rw);
         } catch (Exception ex) {
             ex.printStackTrace();
         }
         return e;
-    }
-
-    public int size() {
-        // todo size?
-        return 0;
     }
 
     public void close() {

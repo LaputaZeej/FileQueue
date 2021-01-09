@@ -7,9 +7,10 @@ import java.io.RandomAccessFile;
 
 /**
  * json 协议存数据
+ *
  * @param <E>
  */
-public  class GsonTransform<E> implements Transform<E> {
+public class GsonTransform<E> implements Transform<E> {
     private Gson gson;
     private Class<E> clz;
     private static final String SEPARATOR = ";";
@@ -34,6 +35,7 @@ public  class GsonTransform<E> implements Transform<E> {
     public E read(RandomAccessFile randomAccessFile) {
         try {
             String json = randomAccessFile.readUTF();
+            System.out.println("json = " + json);
             randomAccessFile.readUTF();
             E e = gson.fromJson(json, clz);
             return e;

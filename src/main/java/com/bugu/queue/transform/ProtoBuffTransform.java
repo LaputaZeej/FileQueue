@@ -1,23 +1,24 @@
 package com.bugu.queue.transform;
 
 import com.google.protobuf.*;
+import sun.nio.cs.UTF_8;
 
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.lang.reflect.Field;
-import java.lang.reflect.ParameterizedType;
-import java.lang.reflect.Type;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 
 public class ProtoBuffTransform<E extends MessageLite> implements Transform<E> {
     private static final String SEPARATOR = ";";
-    private com.google.protobuf.Parser<E> PARSER; // protoä¼šè‡ªåŠ¨æˆæˆï¼Œprivate
+    private com.google.protobuf.Parser<E> PARSER; // proto»á×Ô¶¯³É³É£¬private
 
-    // PARSERæ˜¯ç§æœ‰çš„
+    // PARSERÊÇË½ÓĞµÄ
 //    public ProtoBuffTransform(Parser<E> PARSER) {
 //        this.PARSER = PARSER;
 //    }
 
-    // åå°„é™æ€å¯¹è±¡
+    // ·´Éä¾²Ì¬¶ÔÏó
     public ProtoBuffTransform(Class<?> clz) {
         try {
             Field parser = clz.getDeclaredField("PARSER");
@@ -29,7 +30,7 @@ public class ProtoBuffTransform<E extends MessageLite> implements Transform<E> {
         }
     }
 
-      // è‡ªå·±åˆ›å»ºçš„æ— æ•ˆ
+      // ×Ô¼º´´½¨µÄÎŞĞ§
 //    public ProtoBuffTransform(Class<E> clz) {
 //        this.PARSER = new AbstractParser<E>() {
 //            @Override
@@ -52,7 +53,7 @@ public class ProtoBuffTransform<E extends MessageLite> implements Transform<E> {
     public void write(E e, RandomAccessFile raf) {
         try {
             byte[] bytes = e.toByteArray();
-            String s = new String(bytes);
+            String s = new String(bytes,StandardCharsets.UTF_8);
             raf.writeUTF(s);
             raf.writeUTF(SEPARATOR);
         } catch (IOException ex) {
@@ -64,8 +65,7 @@ public class ProtoBuffTransform<E extends MessageLite> implements Transform<E> {
     public E read(RandomAccessFile raf) {
         try {
             String s = raf.readUTF();
-            E e = PARSER.parseFrom(s.getBytes());
-            System.out.println("e = " + e);
+            E e = PARSER.parseFrom(s.getBytes(StandardCharsets.UTF_8));
             raf.readUTF();
             return e;
         } catch (Exception ex) {
