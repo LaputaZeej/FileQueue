@@ -34,7 +34,7 @@ class FileQueueUnitTest {
         val fileQueue = testClearDiskNewFile()
         println("head = ${fileQueue.headPoint}")
         println("tail = ${fileQueue.tailPoint}")
-        fileQueue.clearDisk()
+        fileQueue.compressDisk()
         Thread.sleep(1000)
         println("清理磁盘end")
     }

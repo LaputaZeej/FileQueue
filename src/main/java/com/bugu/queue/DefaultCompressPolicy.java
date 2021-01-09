@@ -12,10 +12,10 @@ import java.io.RandomAccessFile;
  * 5.重复3&4，直到没有新的数据
  * 6.更新文件长度，更新head和tail数据。
  */
-public class DefaultClearPolicy implements ClearPolicy {
+public class DefaultCompressPolicy implements CompressPolicy {
 
     @Override
-    public <E> boolean clear(FileQueue<E> queue) {
+    public <E> boolean compress(FileQueue<E> queue) {
         display(queue, "a");
         long headPoint = queue.getHeadPoint();
         long tailPoint = queue.getTailPoint();

@@ -3,6 +3,7 @@ package com.bugu.queue;
 import com.bugu.queue.exception.FileQueueException;
 import com.bugu.queue.exception.NotEnoughDiskException;
 import com.bugu.queue.transform.Transform;
+import com.bugu.queue.util.RafUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -12,12 +13,28 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
-final public class FileQueue<E> implements PointerChanged {
+final public class FileQueue<E> {
 
+
+    /**
+     * 默认文件长度
+     */
     //    private static final long DEFAULT_LENGTH = 2 << 19; // 1M
     private static final long DEFAULT_LENGTH = 2 << 9; // 1KB
+
+    /**
+     * 记录头的位置
+     */
     private static final long POINT_HEAD = 0;
+
+    /**
+     * 记录尾的位置
+     */
     private static final long POINT_TAIL = 2 << 2;
+
+    /**
+     * 头文件长度
+     */
     static final long HEADER_LENGTH = 2 << 3;
 
     private long mHeadPoint = 0;
@@ -27,8 +44,20 @@ final public class FileQueue<E> implements PointerChanged {
     private long mLength;
 
     private Transform<E> transform;
-    private ClearPolicy mPolicy = new DefaultClearPolicy();
-    private AtomicBoolean mClear = new AtomicBoolean(false);
+    private CompressPolicy mPolicy = new DefaultCompressPolicy();
+    private CapacityThreshold capacityThreshold = new DefaultCapacityThreshold();
+    private Checker checker = new DefaultChecker();
+    private PointerChanged pointerChanged;
+
+    /**
+     * 正在压缩空间
+     */
+    private AtomicBoolean mCompressing = new AtomicBoolean(false);
+
+    private final Object mUpdateHead = new Object();
+    private final Object mUpdateTail = new Object();
+
+    private ExecutorService executorService = Executors.newSingleThreadExecutor();
 
     /**
      * Lock held by take, poll, etc
@@ -138,9 +167,6 @@ final public class FileQueue<E> implements PointerChanged {
         }
     }
 
-    private final Object mUpdateHead = new Object();
-    private final Object mUpdateTail = new Object();
-
     private void updateHead(long head) throws Exception {
         synchronized (mUpdateHead) {
             if (head > mHeadPoint) {
@@ -190,11 +216,6 @@ final public class FileQueue<E> implements PointerChanged {
         return RafUtil.createRW(mPath);
     }
 
-    // TODO ADD
-    public void add(@NotNull E e) {
-
-    }
-
     private void capacity() {
         logger("capacity!!!");
         mLength += DEFAULT_LENGTH;
@@ -202,14 +223,11 @@ final public class FileQueue<E> implements PointerChanged {
 
     // 剩余长度阈值
     private long vpt() {
-        return mLength >> 3;
+        return capacityThreshold.capacity(this);
     }
 
-    /**
-     * todo
-     */
     public void put(@NotNull E e) throws InterruptedException {
-        if (mClear.get()) {
+        if (mCompressing.get()) {
             System.out.println("正在清理....");
             return;
         }
@@ -229,7 +247,7 @@ final public class FileQueue<E> implements PointerChanged {
                 while (!checkDiskSize()) {
                     System.out.println("< Not enough disk space ! wait... ... >");
                     // 磁盘不够 先释放文件中多余的数据（head之前的数据）
-                    tryClearDisk();
+                    tryCompressDisk();
                     notFull.await();
                 }
                 capacity();
@@ -237,7 +255,9 @@ final public class FileQueue<E> implements PointerChanged {
             }
 
             long tail = enqueue(e);
-            onTailChanged(tail);
+            if (pointerChanged != null) {
+                pointerChanged.onTailChanged(tail);
+            }
             signalNotEmpty();
             logger("put  mTailPoint = " + tail);
         } catch (Exception ex) {
@@ -250,9 +270,37 @@ final public class FileQueue<E> implements PointerChanged {
         }
     }
 
-    private E dequeue(RandomAccessFile readRaf) throws Exception {
-        readRaf.seek(this.mHeadPoint);
-        return transform.read(readRaf);
+    public E take() throws Exception {
+        final ReentrantLock takeLock = this.takeLock;
+        takeLock.lockInterruptibly();
+        long head = this.mHeadPoint;
+        RandomAccessFile readRaf = null;
+        try {
+            while (head >= mTailPoint || mCompressing.get()) {
+                System.out.println("< take nothing any more or in-compressing-disk,wait... ... >");
+                notEmpty.await();
+            }
+            readRaf = createReadRandomAccessFile();
+            E e = dequeue(readRaf);
+            long filePointer = readRaf.getFilePointer();
+            if (e != null /*&& mTailPoint != 0 && filePointer <= mTailPoint*/) {
+                updateHead(filePointer);
+//                this.mHeadPoint = readRaf.getFilePointer();
+                if (pointerChanged != null) {
+                    pointerChanged.onHeadChanged(this.mHeadPoint);
+                }
+            }
+            logger("take mHeadPoint = " + this.mHeadPoint);
+            return e;
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            if (readRaf != null) {
+                readRaf.close();
+            }
+            takeLock.unlock();
+        }
+        throw new FileQueueException("take null");
     }
 
     private long enqueue(@NotNull E e) throws Exception {
@@ -263,9 +311,12 @@ final public class FileQueue<E> implements PointerChanged {
         return tail;
     }
 
-    private ExecutorService executorService = Executors.newSingleThreadExecutor();
+    private E dequeue(RandomAccessFile readRaf) throws Exception {
+        readRaf.seek(this.mHeadPoint);
+        return transform.read(readRaf);
+    }
 
-    private void beforeClearForTest() {
+    private void beforeCompressForTest() {
         for (int i = 0; i < 100; i++) {
             try {
                 take();
@@ -280,16 +331,16 @@ final public class FileQueue<E> implements PointerChanged {
         }
     }
 
-    private long clearDiskTimeOutTime = 1000;
+    private long compressDiskTimeOutTime = 1000;
 
-    private void tryClearDisk() throws NotEnoughDiskException {
+    private void tryCompressDisk() throws NotEnoughDiskException {
         // stop all put and take first?
         executorService.submit(() -> {
-            // beforeClearForTest();
-            mClear.set(true);
-            boolean result = clearDisk();
-            mClear.set(false);
-            System.out.println("clear result = " + result);
+            // beforeCompressForTest();
+            mCompressing.set(true);
+            boolean result = compressDisk();
+            mCompressing.set(false);
+            System.out.println("compress result = " + result);
             if (result) {
                 signalNotFull();
                 signalNotEmpty();
@@ -297,11 +348,11 @@ final public class FileQueue<E> implements PointerChanged {
                 // throw new NotEnoughDiskException();
                 // todo 停止？
                 try {
-                    clearDiskTimeOutTime = clearDiskTimeOutTime * 2;
-                    if (clearDiskTimeOutTime > 100 * 1000) {
-                        clearDiskTimeOutTime = 1000;
+                    compressDiskTimeOutTime = compressDiskTimeOutTime * 2;
+                    if (compressDiskTimeOutTime > 100 * 1000) {
+                        compressDiskTimeOutTime = 1000;
                     }
-                    Thread.sleep(clearDiskTimeOutTime);
+                    Thread.sleep(compressDiskTimeOutTime);
                     signalNotFull();
                     signalNotEmpty();
                 } catch (InterruptedException e) {
@@ -312,21 +363,15 @@ final public class FileQueue<E> implements PointerChanged {
 
     }
 
-    public boolean clearDisk() {
-        return mPolicy.clear(this);
+    public boolean compressDisk() {
+        return mPolicy.compress(this);
     }
 
     /**
      * TODO  checkDiskSize
      */
     protected boolean checkDiskSize() {
-        try {
-            long length = mRaf.length();
-            return length <= DEFAULT_LENGTH * 512;
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        return true;
+        return checker.hasDisk(this);
 
     }
 
@@ -335,36 +380,7 @@ final public class FileQueue<E> implements PointerChanged {
         return null;
     }
 
-    public E take() throws Exception {
-        final ReentrantLock takeLock = this.takeLock;
-        takeLock.lockInterruptibly();
-        long head = this.mHeadPoint;
-        RandomAccessFile readRaf = null;
-        try {
-            while (head >= mTailPoint /*|| mClear.get()*/) {
-                System.out.println("< take nothing any more or in-clearing-disk,wait... ... >");
-                notEmpty.await();
-            }
-            readRaf = createReadRandomAccessFile();
-            E e = dequeue(readRaf);
-            long filePointer = readRaf.getFilePointer();
-            if (e != null /*&& mTailPoint != 0 && filePointer <= mTailPoint*/) {
-                updateHead(filePointer);
-//                this.mHeadPoint = readRaf.getFilePointer();
-                onHeadChanged(this.mHeadPoint);
-            }
-            logger("take mHeadPoint = " + this.mHeadPoint);
-            return e;
-        } catch (Exception e) {
-            e.printStackTrace();
-        } finally {
-            if (readRaf != null) {
-                readRaf.close();
-            }
-            takeLock.unlock();
-        }
-        throw new FileQueueException("take null");
-    }
+
 
     @Nullable
     public E poll(long timeout, TimeUnit unit) throws InterruptedException {
@@ -406,12 +422,20 @@ final public class FileQueue<E> implements PointerChanged {
 
     public void setTailPoint(long mTailPoint) {
         this.mTailPoint = mTailPoint;
-        onTailChanged(mTailPoint);
+        if (pointerChanged != null) {
+            pointerChanged.onTailChanged(mTailPoint);
+        }
+    }
+
+    public long getLength() {
+        return mLength;
     }
 
     public void setHeadPoint(long mHeadPoint) {
         this.mHeadPoint = mHeadPoint;
-        onHeadChanged(mHeadPoint);
+        if (pointerChanged != null) {
+            pointerChanged.onHeadChanged(mHeadPoint);
+        }
     }
 
     public void setLength(long mLength) {
@@ -427,23 +451,14 @@ final public class FileQueue<E> implements PointerChanged {
         return mRaf;
     }
 
+
+    private boolean DEBUG = true;
+
     private void logger(String msg) {
         if (DEBUG) System.out.println(msg);
     }
 
-    private boolean DEBUG = true;
-
     public void setDebug(boolean debug) {
         this.DEBUG = debug;
-    }
-
-    @Override
-    public void onHeadChanged(long head) {
-
-    }
-
-    @Override
-    public void onTailChanged(long tail) {
-
     }
 }

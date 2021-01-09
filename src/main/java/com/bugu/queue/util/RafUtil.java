@@ -1,4 +1,4 @@
-package com.bugu.queue;
+package com.bugu.queue.util;
 
 import org.jetbrains.annotations.NotNull;
 
