@@ -13,3 +13,9 @@
 ### 6.目前实现文件会有一个初始的大小，当达到一定的阈值，比如初始大小的1/8时，会尝试扩容。扩容之前会先检查磁盘空间是否够用并且会尝试压缩空间，如果够用，则扩容。
 ### 7.压缩空间：当head>16时，说明这个文件已经读了一些,在tail之前的数据可以清理掉。
 
+# 使用
+`
+ val fileQueue = createGsonFileQueue<Dog>(path)
+ fileQueue.put(Dog("a",10))
+ val dog = fileQueue.take()
+`
