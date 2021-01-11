@@ -55,7 +55,7 @@ class FileQueueUnitTest {
 
 
     private fun testClearDiskInFileQueue() = createGsonFileQueue<_Dog.Dog>(
-        "C:\\Users\\xpl\\Documents\\projs\\mqtt\\case\\case_clearDisk_in_file_queue_0012.txt"
+        "C:\\Users\\xpl\\Documents\\projs\\mqtt\\case\\case_clearDisk_in_file_queue_0013.txt"
     )
 
     @Test
@@ -66,8 +66,8 @@ class FileQueueUnitTest {
         println("tail = ${fileQueue.tailPoint}")
 
         println("开始放入数据")
-        val count = 1000 * 1000
-        val dataList = createData(count)
+        val count = 100 * 1000
+        val dataList = createData(count).asSequence()
         dataList.forEach {
             fileQueue.put(it)
         }

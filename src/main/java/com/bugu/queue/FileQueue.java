@@ -10,6 +10,7 @@ import org.jetbrains.annotations.NotNull;
 import java.io.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -280,8 +281,12 @@ final public class FileQueue<E> {
             if (pointerChanged != null) {
                 pointerChanged.onTailChanged(tail);
             }
-            signalNotEmpty();
+
             logger("put  mTailPoint = " + tail);
+            // todo test 添加成功后，如果还能添加，则唤醒其他线程添加的锁
+            if (mTailPoint >= mLength || mLength - threshold() < mTailPoint) {
+                notFull.signal(); // 唤醒添加线程
+            }
         } catch (Exception ex) {
             ex.printStackTrace();
         } finally {
@@ -290,6 +295,7 @@ final public class FileQueue<E> {
 //            }
             putLock.unlock();
         }
+        signalNotEmpty();
     }
 
     // todo test
@@ -298,21 +304,20 @@ final public class FileQueue<E> {
             System.out.println("正在清理....");
             return false;
         }
+        long c = -1;
+        final AtomicLong count = new AtomicLong(this.mLength);
         final ReentrantLock putLock = this.putLock;
         long nanos = unit.toNanos(timeout);
         putLock.lockInterruptibly();
         try {
             checkRandomAccessFile();
-
             // 当tail到了文件末尾时，考虑扩容
             while (mTailPoint >= mLength || mLength - threshold() < mTailPoint) {
                 // 扩容前，检查剩余磁盘大小
                 while (!checkDiskSize()) {
-
                     if (nanos <= 0) {//当时间消耗完全，操作未成功 返回false
                         return false;
                     }
-
                     System.out.println("< Not enough disk space ! wait... ... >");
                     // 磁盘不够 先释放文件中多余的数据（head之前的数据）
                     tryCompressDisk();
@@ -321,14 +326,16 @@ final public class FileQueue<E> {
                 capacity();
                 mRaf.setLength(mLength);
             }
-
             long tail = enqueue(e);
             if (pointerChanged != null) {
                 pointerChanged.onTailChanged(tail);
             }
-            signalNotEmpty();
+
             logger("put  mTailPoint = " + tail);
-            return true;
+            // todo test 添加成功后，如果还能添加，则唤醒其他线程添加的锁
+            if (mTailPoint >= mLength || mLength - threshold() < mTailPoint) {
+                notFull.signal(); // 唤醒添加线程
+            }
         } catch (Exception ex) {
             ex.printStackTrace();
         } finally {
@@ -337,8 +344,8 @@ final public class FileQueue<E> {
 //            }
             putLock.unlock();
         }
-
-        return false;
+        signalNotEmpty();
+        return true;
     }
 
     // todo test
@@ -365,9 +372,12 @@ final public class FileQueue<E> {
             if (pointerChanged != null) {
                 pointerChanged.onTailChanged(tail);
             }
-            signalNotEmpty();
+
+            // todo test 添加成功后，如果还能添加，则唤醒其他线程添加的锁
+            if (mTailPoint >= mLength || mLength - threshold() < mTailPoint) {
+                notFull.signal(); // 唤醒添加线程
+            }
             logger("put  mTailPoint = " + tail);
-            return true;
         } catch (Exception ex) {
             ex.printStackTrace();
         } finally {
@@ -376,7 +386,8 @@ final public class FileQueue<E> {
 //            }
             putLock.unlock();
         }
-        return false;
+        signalNotEmpty();
+        return true;
     }
 
     public E take() throws Exception {
@@ -400,6 +411,13 @@ final public class FileQueue<E> {
                 if (pointerChanged != null) {
                     pointerChanged.onHeadChanged(this.mHeadPoint);
                 }
+                // todo test 如果取完还有 唤醒取出线程
+                if (head >= mTailPoint || mCompressing.get()) {
+                    notEmpty.signal();
+                }
+
+                // todo 因为没有删除（还在文件里存着） 所以不用通知notFull锁
+                // signalNotFull();
             }
             logger("take mHeadPoint = " + this.mHeadPoint);
             return e;
