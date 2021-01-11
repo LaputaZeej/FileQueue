@@ -55,7 +55,7 @@ class FileQueueUnitTest {
 
 
     private fun testClearDiskInFileQueue() = createGsonFileQueue<_Dog.Dog>(
-        "C:\\Users\\xpl\\Documents\\projs\\mqtt\\case\\case_clearDisk_in_file_queue_0011.txt"
+        "C:\\Users\\xpl\\Documents\\projs\\mqtt\\case\\case_clearDisk_in_file_queue_0012.txt"
     )
 
     @Test

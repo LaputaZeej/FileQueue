@@ -1,7 +1,7 @@
 package com.bugu.queue;
 
 /**
- * æ‰©å®¹é˜ˆå€¼
+ * À©ÈÝãÐÖµ
  */
 public interface CapacityThreshold {
     long capacity(FileQueue fileQueue);

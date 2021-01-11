@@ -65,26 +65,19 @@ public class DefaultCompressPolicy implements CompressPolicy {
                 queue.setTailPoint(newTailPoint);
                 queue.setLength(newTailPoint);
                 System.out.println("clear end.");
-                //Thread.sleep(10 * 1000);
-                display(queue, "b");
+                display(queue, "");
                 return true;
             } catch (Exception e) {
                 e.printStackTrace();
-            }finally {
-//                queue.signalNotFull();
-//                queue.signalNotEmpty();
             }
-
         }
         // 数据不能删除，只能期望其他地方清理内存
-//        queue.signalNotFull();
-//        queue.signalNotEmpty();
         return false;
     }
 
     private static boolean debug = false;
 
-    public static <E> void display(FileQueue<E> queue, String tag) {
+    static <E> void display(FileQueue<E> queue, String tag) {
 
         if (!debug) {
             return;
