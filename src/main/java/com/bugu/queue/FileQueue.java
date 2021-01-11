@@ -250,7 +250,7 @@ final public class FileQueue<E> {
 
     public void put(@NotNull E e) throws InterruptedException {
         if (mCompressing.get()) {
-            System.out.println("正在清理....");
+            logger("正在清理....");
             return;
         }
         final ReentrantLock putLock = this.putLock;
@@ -268,7 +268,7 @@ final public class FileQueue<E> {
             while (mTailPoint >= mLength || mLength - threshold() < mTailPoint) {
                 // 扩容前，检查剩余磁盘大小
                 while (!checkDiskSize()) {
-                    System.out.println("< Not enough disk space ! wait... ... >");
+                    logger("< Not enough disk space ! wait... ... >");
                     // 磁盘不够 先释放文件中多余的数据（head之前的数据）
                     tryCompressDisk();
                     notFull.await();
@@ -301,7 +301,7 @@ final public class FileQueue<E> {
     // todo test
     public boolean offer(@NotNull E e, long timeout, TimeUnit unit) throws InterruptedException {
         if (mCompressing.get()) {
-            System.out.println("正在清理....");
+            logger("正在清理....");
             return false;
         }
         long c = -1;
@@ -318,7 +318,7 @@ final public class FileQueue<E> {
                     if (nanos <= 0) {//当时间消耗完全，操作未成功 返回false
                         return false;
                     }
-                    System.out.println("< Not enough disk space ! wait... ... >");
+                    logger("< Not enough disk space ! wait... ... >");
                     // 磁盘不够 先释放文件中多余的数据（head之前的数据）
                     tryCompressDisk();
                     nanos = notFull.awaitNanos(nanos);
@@ -351,7 +351,7 @@ final public class FileQueue<E> {
     // todo test
     public boolean offer(@NotNull E e) throws InterruptedException {
         if (mCompressing.get()) {
-            System.out.println("正在清理....");
+            logger("正在清理....");
             return false;
         }
         // 加锁前判断是否满
@@ -397,7 +397,7 @@ final public class FileQueue<E> {
 
         try {
             while (head >= mTailPoint || mCompressing.get()) {
-                System.out.println("< take nothing any more or in-compressing-disk,wait... ... >");
+                logger("< take nothing any more or in-compressing-disk,wait... ... >");
                 notEmpty.await();
             }
             if (mReadRaf == null) {
@@ -441,7 +441,7 @@ final public class FileQueue<E> {
         RandomAccessFile readRaf = null;
         try {
             while (head >= mTailPoint || mCompressing.get()) {
-                System.out.println("< take nothing any more or in-compressing-disk,wait... ... >");
+                logger("< take nothing any more or in-compressing-disk,wait... ... >");
                 if (nanos <= 0) {//时间消耗完全后，如果操作未成功则返回null
                     return null;
                 }
@@ -556,7 +556,7 @@ final public class FileQueue<E> {
             mCompressing.set(true);
             boolean result = compressDisk();
             mCompressing.set(false);
-            System.out.println("compress result = " + result);
+            logger("compress result = " + result);
             if (result) {
                 signalNotFull();
                 signalNotEmpty();
