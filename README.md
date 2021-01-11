@@ -19,3 +19,28 @@
  fileQueue.put(Dog("a",10))
  val dog = fileQueue.take()
 ```
+
+自己实现序列化与反序列化
+```
+  val transform = object :Transform<Dog>{
+                override fun write(data: Dog, raf: RandomAccessFile) {
+                    try {
+                        raf.writeUTF(data.name)
+                        raf.writeInt(data.age)
+                    }catch (e:Throwable){
+                        e.printStackTrace()
+                    }
+                }
+
+                override fun read(raf: RandomAccessFile): String {
+                    try {
+                        val name = raf.readUTF()
+                        val age = raf.readInt()
+                        return Dog(name,age)
+                    }catch (e:Throwable){
+                        e.printStackTrace()
+                    }
+                    return null
+                }
+            }
+```
