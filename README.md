@@ -14,8 +14,8 @@
 ### 7.压缩空间：当head>16时，说明这个文件已经读了一些,在tail之前的数据可以清理掉。
 
 # 使用
-`
+```
  val fileQueue = createGsonFileQueue<Dog>(path)
  fileQueue.put(Dog("a",10))
  val dog = fileQueue.take()
-`
+```
