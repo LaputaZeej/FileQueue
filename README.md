@@ -37,7 +37,7 @@ put和take（阻塞）
                     }
                 }
 
-                override fun read(raf: RandomAccessFile): String {
+                override fun read(raf: RandomAccessFile): Dog {
                     try {
                         val name = raf.readUTF()
                         val age = raf.readInt()
