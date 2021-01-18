@@ -1,0 +1,17 @@
+plugins {
+    id 'java'
+}
+
+group 'com.bugu.queue'
+version '0.0.1'
+
+sourceCompatibility = 1.8
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    testCompile group: 'junit', name: 'junit', version: '4.12'
+    implementation 'com.google.code.gson:gson:2.8.5'
+}
