@@ -10,6 +10,7 @@ import com.bugu.queue.util.Size;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -28,8 +29,12 @@ public class ImmutableFileQueue<E> implements FileQueue<E> {
     private Pointer tailPoint = new TailPointer();
     private Pointer lengthPoint = new LengthPointer();
     private final FileQueueHeadTransform headerTransform = new FileQueueHeadTransform();
+    private AtomicInteger state = new AtomicInteger(STATE_CLOSE);
+    private static final int STATE_CLOSE = 0;
+    private static final int STATE_ON = 1;
 
     private OnFileQueueChanged onFileQueueChanged;
+    private CheckDiskCallback checkDiskCallback;
 
     private ImmutableFileQueue() {
     }
@@ -69,9 +74,11 @@ public class ImmutableFileQueue<E> implements FileQueue<E> {
             r = RafHelper.createRW(path);
             if (existFile) {
                 parseHeader(r);
+
             } else {
                 createHeader(r);
             }
+            state.set(STATE_ON);
         } catch (Exception e) {
             e.printStackTrace();
         } finally {
@@ -118,11 +125,33 @@ public class ImmutableFileQueue<E> implements FileQueue<E> {
     }
 
     @Override
+    public boolean delete() {
+        // todo 正在添加/获取时删除？
+        close();
+        File file = new File(path);
+        if (file.exists()) {
+            boolean delete = file.delete();
+            return delete;
+        }
+        return true;
+    }
+
+    private void checkState() throws FileQueueException {
+        if (isClosed()) {
+            throw new FileQueueException("fileQueue 已经关闭");
+        }
+    }
+
+    @Override
     public void put(E e) throws Exception {
+        checkState();
         if (e == null) throw new NullPointerException();
         final ReentrantLock putLock = this.putLock;
         info("start put ...............");
         putLock.lockInterruptibly();
+        if (isClosed()) {
+            return;
+        }
         try {
             createWriteRandomAccessFile();
             this.writeRaf.setLength(fileQueueHeader.getLength());
@@ -131,7 +160,9 @@ public class ImmutableFileQueue<E> implements FileQueue<E> {
                 warning("< any more space to put ... >");
                 notFull.await();
             }
-
+            if (isClosed()) {
+                return;
+            }
             enqueue(e);
             notifyChanged(0);
             if (!(validateFull() || checkDiskFull())) {
@@ -145,8 +176,8 @@ public class ImmutableFileQueue<E> implements FileQueue<E> {
 
     }
 
-    public boolean checkDiskFull() {
-        return false;
+    private boolean checkDiskFull() {
+        return checkDiskCallback == null ? cDEFAULT.check(this) : checkDiskCallback.check(this);
     }
 
     private boolean validateFull() {
@@ -195,15 +226,22 @@ public class ImmutableFileQueue<E> implements FileQueue<E> {
 
     @Override
     public E take() throws Exception {
+        checkState();
         E e;
         final ReentrantLock takeLock = this.takeLock;
         takeLock.lockInterruptibly();
+        if (isClosed()) {
+            throw new FileQueueException("  closed ");
+        }
         try {
             createReadRandomAccessFile();
             this.readRaf.setLength(fileQueueHeader.getLength());
             while (validateEmpty()) {
                 warning("< anymore data to take ... >");
                 notEmpty.await();
+            }
+            if (isClosed()) {
+                throw new FileQueueException("  closed ");
             }
             e = dequeue();
             if (e != null) {
@@ -219,8 +257,12 @@ public class ImmutableFileQueue<E> implements FileQueue<E> {
         } finally {
             takeLock.unlock();
         }
-        //signalNotFull(); // 因为文件内容没有删除，所以不需要通知
+        //signalNotFull();
         return e;
+    }
+
+    private boolean isClosed() {
+        return state.get() == 0;
     }
 
     private boolean validateEmpty() {
@@ -237,9 +279,18 @@ public class ImmutableFileQueue<E> implements FileQueue<E> {
 
     @Override
     public void close() {
-        RafHelper.close(writeRaf);
-        RafHelper.close(readRaf);
-        RafHelper.close(headerRaf);
+        synchronized (this) {
+            state.set(0);
+            signalNotEmpty();
+            signalNotFull();
+            RafHelper.close(writeRaf);
+            RafHelper.close(readRaf);
+            RafHelper.close(headerRaf);
+            fileQueueHeader = null;
+            writeRaf = null;
+            readRaf = null;
+            headerRaf = null;
+        }
     }
 
     public OnFileQueueChanged getOnFileQueueChanged() {
@@ -248,6 +299,10 @@ public class ImmutableFileQueue<E> implements FileQueue<E> {
 
     public void setOnFileQueueChanged(OnFileQueueChanged onFileQueueChanged) {
         this.onFileQueueChanged = onFileQueueChanged;
+    }
+
+    public void setCheckDiskCallback(CheckDiskCallback checkDiskCallback) {
+        this.checkDiskCallback = checkDiskCallback;
     }
 
     RandomAccessFile getWriteRaf() {
@@ -267,6 +322,7 @@ public class ImmutableFileQueue<E> implements FileQueue<E> {
         return lengthPoint;
     }
 
+    @Override
     public String getPath() {
         return path;
     }
@@ -329,4 +385,10 @@ public class ImmutableFileQueue<E> implements FileQueue<E> {
     private void warning(String msg) {
         Logger.warning(msg);
     }
+
+    public static interface CheckDiskCallback {
+        boolean check(FileQueue<?> fileQueue);
+    }
+
+    private final CheckDiskCallback cDEFAULT = (fileQueue) -> true;
 }

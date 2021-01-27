@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+option java_package = "com.bugu.queue.bean";
+option java_outer_classname = "_MqttMessage";
+
+message MqttMessage {
+    int64  time= 1;
+    int32  type= 2;
+    string  content= 3;
+    int64  id= 4;
+}

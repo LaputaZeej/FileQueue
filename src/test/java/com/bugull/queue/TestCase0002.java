@@ -3,7 +3,9 @@ package com.bugull.queue;
 import com.bugu.queue.FileQueue;
 import com.bugu.queue.ImmutableFileQueue;
 import com.bugu.queue.MutableFileQueue;
+import com.bugu.queue.bean._MqttMessage;
 import com.bugu.queue.transform.GsonTransform;
+import com.bugu.queue.transform.ProtobufTransform;
 import com.bugu.queue.util.Logger;
 import com.bugu.queue.util.Size;
 import org.junit.Test;
@@ -12,79 +14,12 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public class TestCase0001 {
-
-    @Test
-    public void t01() {
-
-        MutableFileQueue<String> fileQueue = new MutableFileQueue<>("path", new GsonTransform<>(String.class));
-        try {
-            fileQueue.put("1");
-            String take = fileQueue.take();
-            System.out.println(take);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-    }
-
-    @Test
-    public void t02() {
-        String path = createPath("t02_0000001.txt");
-        MutableFileQueue<String> fileQueue = new MutableFileQueue<>(path, new GsonTransform<>(String.class));
-    }
-
-    // put
-    @Test
-    public void t03() {
-        Logger.info("-------------------------------------------");
-        String path = createPath("t03_0000009.txt");
-        MutableFileQueue<MqttMessage> fileQueue = new MutableFileQueue<>(path, new GsonTransform<>(MqttMessage.class));
-
-        int index = 0;
-        int count = 100;
-        while (true) {
-            if (index > count) {
-                break;
-            }
-            try {
-                long time = System.currentTimeMillis();
-                MqttMessage message = new MqttMessage(time, index % 2, "content = " + index, index);
-                fileQueue.put(message);
-            } catch (Exception e) {
-                e.printStackTrace();
-                break;
-            }
-            index++;
-        }
-        fileQueue.close();
-        Logger.info("-------------------------------------------");
-
-
-    }
-
-    // take
-    @Test
-    public void t04() {
-        Logger.info("-------------------------------------------");
-        String path = createPath("t03_0000009.txt");
-        ImmutableFileQueue<MqttMessage> fileQueue = new ImmutableFileQueue<>(path, new GsonTransform<>(MqttMessage.class));
-        while (true) {
-            try {
-                Thread.sleep(500);
-                MqttMessage take = fileQueue.take();
-                System.out.println(take);
-            } catch (Exception e) {
-                break;
-            }
-        }
-
-    }
+public class TestCase0002 {
 
     @Test
     public void takeAndPut() {
-        Logger.info("-------------------------------------------");
-        String path = createPath("takeAndPut_0000001.txt");
+        Logger.info("---------------------start----------------------");
+        String path = createPath("TestCase0002_takeAndPut_0000001.txt");
         MutableFileQueue<MqttMessage> fileQueue = new MutableFileQueue<>(path, new GsonTransform<>(MqttMessage.class));
         startThread(() -> {
             while (true) {
@@ -93,166 +28,111 @@ public class TestCase0001 {
                     MqttMessage take = fileQueue.take();
                     System.out.println(take);
                 } catch (Exception e) {
+                    e.printStackTrace();
                     break;
                 }
             }
-        });
-
-        startThread(() -> {
-            while (true) {
-                try {
-                    int index = 0;
-                    int count = 10000;
-                    while (true) {
-                        if (index > count) {
-                            break;
-                        }
-                        try {
-                            long time = System.currentTimeMillis();
-                            MqttMessage message = new MqttMessage(time, index % 2, "content = " + index, index);
-                            fileQueue.put(message);
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                            break;
-                        }
-                        index++;
-                    }
-                } catch (Exception e) {
-                    break;
-                }
-            }
-        });
-        fileQueue.close();
-        holdOn();
-    }
-
-    @Test
-    public void testPut() {
-        String path = createPath("testPut_0000003.txt");
-        MutableFileQueue<MqttMessage> fileQueue = new MutableFileQueue<>(path, new GsonTransform<>(MqttMessage.class));
-        fileQueue.setOnFileQueueChanged((t1, t2, t3) -> {
-            System.out.println("====================================");
-            System.out.println("============   error!!!    =========");
-            System.out.println("====================================");
-            full.set(true);
-        });
-        startThread(() -> {
-            try {
-                MqttMessage message = new MqttMessage(111, 111, "11111", 1);
-                fileQueue.put(message);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-
         });
 
         startThread(() -> {
             try {
-                MqttMessage message = new MqttMessage(2222, 2222, "22222", 2);
-                fileQueue.put(message);
+                int index = 0;
+                int count = 100;
+                while (true) {
+                    if (index > count) {
+                        break;
+                    }
+                    try {
+                        long time = System.currentTimeMillis();
+                        MqttMessage message = new MqttMessage(time, index % 2, "content = " + index, index);
+                        fileQueue.put(message);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                        break;
+                    }
+                    index++;
+                }
             } catch (Exception e) {
                 e.printStackTrace();
             }
-
         });
+        Logger.info("------------------10s后关闭-------------------------");
+        try {
+            Thread.sleep(10 * 1000L);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
         fileQueue.close();
+        Logger.info("------------------close-------------------------");
+        try {
+            Thread.sleep(5 * 1000L);
+            Logger.info("------------------end-------------------------");
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
         holdOn();
     }
-
-    AtomicBoolean full = new AtomicBoolean(false);
-
 
     @Test
-    public void takeAndPutMutable() {
-        Logger.info("-------------------------------------------");
-        String path = createPath("takeAndPutMutable_0000009_10G.txt");
-        ExecutorService executorService = Executors.newFixedThreadPool(10);
-        long maxSize = Size._G * 10;
-        MutableFileQueue<MqttMessage> fileQueue = new MutableFileQueue<>(path, maxSize, new GsonTransform<>(MqttMessage.class));
-
-        fileQueue.setOnFileQueueChanged((t1, t2, t3) -> {
-            if (t2 == 0 && t3.getLength() >= maxSize) {
-                System.out.println("====================================");
-                System.out.println("============   error!!!    =========");
-                System.out.println("====================================");
-                full.set(true);
-            }
-        });
-        executorService.execute(new PutRunnable(fileQueue, "<1>"));
-        executorService.execute(new PutRunnable(fileQueue, "<2>"));
-        executorService.execute(new TakeRunnable(fileQueue, "<1>"));
-        executorService.execute(new TakeRunnable(fileQueue, "<2>"));
-        executorService.execute(new TakeRunnable(fileQueue, "<3>"));
-
-        try {
-            Thread.sleep(10*1000);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-
-        fileQueue.close();
-
-        System.out.println("====================================");
-        System.out.println("============   close        =========");
-        System.out.println("====================================");
-        try {
-            Thread.sleep(3*1000);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-
-        executorService.execute(new PutRunnable(fileQueue, "<4>"));
-        executorService.execute(new TakeRunnable(fileQueue, "<5>"));
-
-        System.out.println("====================================");
-        System.out.println("============   delete        =========");
-        System.out.println("====================================");
-        try {
-            Thread.sleep(3*1000);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-
-        fileQueue.delete();
-
-//        executorService.execute(new PutRunnable(fileQueue, "<4>"));
-//        executorService.execute(new TakeRunnable(fileQueue, "<5>"));
-
-        holdOn();
-    }
-
-    private class PutRunnable implements Runnable {
-        FileQueue<MqttMessage> fileQueue;
-        String tag;
-
-        public PutRunnable(FileQueue<MqttMessage> fileQueue, String tag) {
-            this.fileQueue = fileQueue;
-            this.tag = tag;
-        }
-
-        @Override
-        public void run() {
+    public void takeAndPutProto() {
+        Logger.info("---------------------start----------------------");
+        String path = createPath("TestCase0002_takeAndPutProto_0000001.txt");
+        MutableFileQueue<_MqttMessage.MqttMessage> fileQueue = new MutableFileQueue<_MqttMessage.MqttMessage>(path, new ProtobufTransform<_MqttMessage.MqttMessage>(_MqttMessage.MqttMessage.class));
+        startThread(() -> {
             while (true) {
                 try {
-                    int index = 0;
-                    while (true) {
-
-                        Thread.sleep(100);
-                        try {
-                            long time = System.currentTimeMillis();
-                            MqttMessage message = new MqttMessage(time, index % 2, tag + index + TEXT, index);
-                            fileQueue.put(message);
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                            break;
-                        }
-                        index++;
-                    }
+                    Thread.sleep(500);
+                    _MqttMessage.MqttMessage take = fileQueue.take();
+                    System.out.println(take.getContent());
                 } catch (Exception e) {
+                    e.printStackTrace();
                     break;
                 }
             }
+        });
+
+        startThread(() -> {
+            try {
+                int index = 0;
+                int count = 100;
+                while (true) {
+                    if (index > count) {
+                        break;
+                    }
+                    try {
+                        long time = System.currentTimeMillis();
+                        _MqttMessage.MqttMessage message =
+                                _MqttMessage.MqttMessage.newBuilder().setTime(time)
+                                        .setContent("content=" + index + TEXT)
+                                        .setId(index)
+                                        .setType(index % 2)
+                                        .build();
+                        fileQueue.put(message);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                        break;
+                    }
+                    index++;
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
+        Logger.info("------------------10s后关闭-------------------------");
+        try {
+            Thread.sleep(10 * 1000L);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
         }
+        fileQueue.close();
+        Logger.info("------------------close-------------------------");
+        try {
+            Thread.sleep(5 * 1000L);
+            Logger.info("------------------end-------------------------");
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        holdOn();
     }
 
     private static class TakeRunnable implements Runnable {

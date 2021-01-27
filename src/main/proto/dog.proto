@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+
+option java_package = "com.laputa.dog";
+option java_outer_classname = "_Dog";
+
+
+message Dog{
+     string name = 1;
+     int32 age = 2;
+}

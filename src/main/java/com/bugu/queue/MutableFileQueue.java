@@ -1,9 +1,7 @@
 package com.bugu.queue;
 
-
 import com.bugu.queue.head.FileQueueHeader;
 import com.bugu.queue.util.Logger;
-import com.bugu.queue.util.RafHelper;
 import com.bugu.queue.util.Size;
 
 import java.io.RandomAccessFile;
@@ -16,6 +14,11 @@ public class MutableFileQueue<E> implements FileQueue<E> {
     private long max;
     private static final long MAX_SIZE = Size._G;
 
+    public MutableFileQueue(ImmutableFileQueue<E> fileQueue, long max) {
+        this.max = max;
+        initFileQueue(fileQueue);
+    }
+
     public MutableFileQueue(String path, Transform<E> transform) {
         this(path, MIN_SIZE, MAX_SIZE, transform);
     }
@@ -27,18 +30,19 @@ public class MutableFileQueue<E> implements FileQueue<E> {
 
     public MutableFileQueue(String path, long capacity, long max, Transform<E> transform) {
         this.max = max;
-        this.fileQueue = new ImmutableFileQueue<E>(path, capacity, transform) {
-            @Override
-            public boolean checkDiskFull() {
-                return getHeader().getLength() >= MutableFileQueue.this.max;
-            }
-        };
-        this.fileQueue.setOnFileQueueChanged((fileQueue, type, header) -> {
+        this.fileQueue = new ImmutableFileQueue<E>(path, capacity, transform);
+        initFileQueue(fileQueue);
+    }
+
+    private void initFileQueue(ImmutableFileQueue<E> fileQueue) {
+        this.fileQueue = fileQueue;
+        this.fileQueue.setCheckDiskCallback((fq) -> fq.getHeader().getLength() >= MutableFileQueue.this.max);
+        this.fileQueue.setOnFileQueueChanged((fq, type, header) -> {
             if (type == 0) {
                 tryCapacity(header);
             }
             if (onFileQueueChanged != null) {
-                onFileQueueChanged.onChanged(fileQueue, type, header);
+                onFileQueueChanged.onChanged(fq, type, header);
             }
         });
     }
@@ -83,6 +87,16 @@ public class MutableFileQueue<E> implements FileQueue<E> {
     @Override
     public FileQueueHeader getHeader() {
         return fileQueue.getHeader();
+    }
+
+    @Override
+    public String getPath() {
+        return fileQueue.getPath();
+    }
+
+    @Override
+    public boolean delete() {
+        return fileQueue.delete();
     }
 
     public void setOnFileQueueChanged(OnFileQueueChanged onFileQueueChanged) {

@@ -23,6 +23,10 @@ public interface FileQueue<E> {
     E take() throws Exception;
 
     FileQueueHeader getHeader() ;
+
+    String getPath();
+
+    boolean delete() ;
 //
 //    E peek();
 //
